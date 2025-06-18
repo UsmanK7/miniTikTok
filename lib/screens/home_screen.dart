@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
 import '../models/video_model.dart';
 import '../widgets/video_player_widget.dart';
+import '../providers/auth_provider.dart';
 import 'upload_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -47,6 +48,54 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _refreshVideos() async {
     // Pull to refresh functionality
     setState(() {});
+  }
+
+  void _handleSignOut() async {
+    final authProvider = context.read<AuthProvider>();
+    
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.grey[900],
+          title: Text(
+            'Sign Out',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: Text(
+            'Are you sure you want to sign out?',
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                await authProvider.signOut();
+                if (authProvider.errorMessage != null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(authProvider.errorMessage!),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              },
+              child: Text(
+                'Sign Out',
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -313,24 +362,41 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           ),
                         ),
                       SizedBox(width: 12),
-                      // Logout button
-                      IconButton(
-                        onPressed: () async {
-                          try {
-                            await FirebaseAuth.instance.signOut();
-                          } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Error signing out: $e'),
-                                backgroundColor: Colors.red,
+                      // Current user indicator and logout
+                      Consumer<AuthProvider>(
+                        builder: (context, authProvider, child) {
+                          return Row(
+                            children: [
+                              // User email indicator
+                              if (authProvider.user?.email != null)
+                                Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    authProvider.user!.email!.split('@')[0],
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ),
+                              SizedBox(width: 8),
+                              IconButton(
+                                onPressed: _handleSignOut,
+                                icon: Icon(
+                                  Icons.logout,
+                                  color: Colors.white,
+                                ),
                               ),
-                            );
-                          }
+                            ],
+                          );
                         },
-                        icon: Icon(
-                          Icons.logout,
-                          color: Colors.white,
-                        ),
                       ),
                     ],
                   ),

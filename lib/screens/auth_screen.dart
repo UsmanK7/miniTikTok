@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
 
 class AuthScreen extends StatefulWidget {
   @override
@@ -7,11 +8,18 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  final _auth = FirebaseAuth.instance;
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLogin = true;
-  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Clear any previous error when screen loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AuthProvider>().clearError();
+    });
+  }
 
   Future<void> _authenticate() async {
     final email = _emailController.text.trim();
@@ -22,34 +30,26 @@ class _AuthScreenState extends State<AuthScreen> {
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    final authProvider = context.read<AuthProvider>();
+    bool success;
 
-    try {
-      if (_isLogin) {
-        await _auth.signInWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
-      } else {
-        await _auth.createUserWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
-      }
-    } on FirebaseAuthException catch (e) {
-      _showSnackBar(e.message ?? 'Authentication failed');
-    } finally {
-      setState(() {
-        _isLoading = false;
-      });
+    if (_isLogin) {
+      success = await authProvider.signIn(email, password);
+    } else {
+      success = await authProvider.signUp(email, password);
+    }
+
+    if (!success && authProvider.errorMessage != null) {
+      _showSnackBar(authProvider.errorMessage!);
     }
   }
 
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
     );
   }
 
@@ -106,24 +106,28 @@ class _AuthScreenState extends State<AuthScreen> {
               SizedBox(
                 width: double.infinity,
                 height: 50,
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _authenticate,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? CircularProgressIndicator(color: Colors.white)
-                      : Text(
-                          _isLogin ? 'Sign In' : 'Sign Up',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
+                child: Consumer<AuthProvider>(
+                  builder: (context, authProvider, child) {
+                    return ElevatedButton(
+                      onPressed: authProvider.isLoading ? null : _authenticate,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
                         ),
+                      ),
+                      child: authProvider.isLoading
+                          ? CircularProgressIndicator(color: Colors.white)
+                          : Text(
+                              _isLogin ? 'Sign In' : 'Sign Up',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                    );
+                  },
                 ),
               ),
               SizedBox(height: 20),
@@ -132,6 +136,8 @@ class _AuthScreenState extends State<AuthScreen> {
                   setState(() {
                     _isLogin = !_isLogin;
                   });
+                  // Clear error when switching between login/signup
+                  context.read<AuthProvider>().clearError();
                 },
                 child: Text(
                   _isLogin
@@ -139,6 +145,35 @@ class _AuthScreenState extends State<AuthScreen> {
                       : 'Already have an account? Sign In',
                   style: TextStyle(color: Colors.white),
                 ),
+              ),
+              // Show error message if exists
+              Consumer<AuthProvider>(
+                builder: (context, authProvider, child) {
+                  if (authProvider.errorMessage != null) {
+                    return Container(
+                      margin: EdgeInsets.only(top: 20),
+                      padding: EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.error_outline, color: Colors.red, size: 20),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              authProvider.errorMessage!,
+                              style: TextStyle(color: Colors.red, fontSize: 14),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  return SizedBox.shrink();
+                },
               ),
             ],
           ),
